@@ -30,7 +30,8 @@ import {
   Network,
   Wallet,
   CreditCard,
-  X
+  X,
+  ChevronRight
 } from 'lucide-react'
 
 interface AdminStats {
@@ -486,9 +487,13 @@ export default function AdminDashboard() {
             { href: '/admin/ranks', icon: Crown, color: 'text-orange-600', bg: 'bg-orange-50', label: 'Ranks', sub: 'Manage comp plan' },
             { href: '/admin/settings', icon: Settings, color: 'text-purple-600', bg: 'bg-purple-50', label: 'Settings', sub: 'Platform config' },
           ].map(({ href, icon: Icon, color, bg, label, sub }) => (
-            <Link key={href} href={href} className="bg-white rounded-xl border border-gray-200 p-3 hover:shadow-sm hover:border-primary-200 transition-all cursor-pointer">
-              <div className={`w-8 h-8 rounded-xl ${bg} flex items-center justify-center mb-2`}>
-                <Icon className={`h-4 w-4 ${color}`} />
+            <Link key={href} href={href} className="group bg-white rounded-xl border-2 border-gray-200 p-3 hover:shadow-md hover:border-primary-400 hover:-translate-y-0.5 transition-all cursor-pointer relative overflow-hidden">
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-500 scale-x-0 group-hover:scale-x-100 transition-transform origin-left" />
+              <div className="flex items-start justify-between mb-2">
+                <div className={`w-8 h-8 rounded-xl ${bg} flex items-center justify-center`}>
+                  <Icon className={`h-4 w-4 ${color}`} />
+                </div>
+                <ChevronRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-primary-500 transition-colors mt-0.5" />
               </div>
               <div className="text-xs font-semibold text-gray-900">{label}</div>
               <div className="text-xs text-gray-400 mt-0.5">{sub}</div>
