@@ -32,6 +32,7 @@ interface Order {
   user_id: string
   user_name: string
   user_email: string
+  user_ibo_number: string
   shipping_address: any
   items: OrderItem[]
 }
@@ -81,7 +82,7 @@ export default function OrderManagement() {
           updated_at,
           user_id,
           shipping_address,
-          users!inner(name, email),
+          users!inner(name, email, ibo_number),
           order_items!inner(
             id,
             quantity,
@@ -107,6 +108,7 @@ export default function OrderManagement() {
         user_id: order.user_id,
         user_name: order.users?.name || 'Unknown',
         user_email: order.users?.email || 'Unknown',
+        user_ibo_number: order.users?.ibo_number || '—',
         shipping_address: order.shipping_address,
         items: order.order_items?.map((item: any) => ({
           id: item.id,
@@ -127,17 +129,26 @@ export default function OrderManagement() {
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ 
-          status: newStatus,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', orderId)
+      if (newStatus === 'processing') {
+        // Use confirm_payment RPC so commissions and wallet credits are triggered
+        const { error } = await supabase.rpc('confirm_payment', { p_order_id: orderId })
+        if (error) {
+          console.error('Error confirming payment:', error)
+          return
+        }
+      } else {
+        const { error } = await supabase
+          .from('orders')
+          .update({ 
+            status: newStatus,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', orderId)
 
-      if (error) {
-        console.error('Error updating order status:', error)
-        return
+        if (error) {
+          console.error('Error updating order status:', error)
+          return
+        }
       }
 
       await fetchOrders()
@@ -167,7 +178,8 @@ export default function OrderManagement() {
     const matchesSearch = 
       order.order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.user_email.toLowerCase().includes(searchTerm.toLowerCase())
+      order.user_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.user_ibo_number.toLowerCase().includes(searchTerm.toLowerCase())
     
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter
 
@@ -272,7 +284,7 @@ export default function OrderManagement() {
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input type="text" placeholder="Search orders..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+            <input type="text" placeholder="Search by order #, name, email or IBO number..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white" />
           </div>
           <div className="flex gap-1.5 flex-wrap">
@@ -307,6 +319,7 @@ export default function OrderManagement() {
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{order.order_number}</div>
                       <div className="text-xs text-gray-500">{order.items.length} item{order.items.length !== 1 ? 's' : ''}</div>
+                      <div className="text-xs font-medium text-primary-600">IBO: {order.user_ibo_number}</div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{order.user_name}</div>

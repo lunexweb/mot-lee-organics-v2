@@ -14,7 +14,9 @@ import {
   Clock, 
   CheckCircle,
   AlertCircle,
-  Users
+  Users,
+  Wallet,
+  XCircle
 } from 'lucide-react'
 
 interface Commission {
@@ -37,6 +39,19 @@ interface EarningsSummary {
   level3Earnings: number
 }
 
+interface Withdrawal {
+  id: string
+  amount: number
+  fee: number
+  net_amount: number
+  status: 'pending' | 'approved' | 'paid' | 'rejected'
+  bank_name: string
+  bank_account_number: string
+  admin_note: string
+  created_at: string
+  processed_at: string | null
+}
+
 export default function EarningsPage() {
   const { userProfile } = useAuth()
   const [commissions, setCommissions] = useState<Commission[]>([])
@@ -52,10 +67,12 @@ export default function EarningsPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid'>('all')
   const [levelFilter, setLevelFilter] = useState<'all' | '1' | '2' | '3'>('all')
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([])
 
   useEffect(() => {
     if (userProfile) {
       fetchEarnings()
+      fetchWithdrawals()
     }
   }, [userProfile])
 
@@ -152,6 +169,18 @@ export default function EarningsPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const fetchWithdrawals = async () => {
+    if (!userProfile) return
+    try {
+      const { data, error } = await supabase
+        .from('withdrawals')
+        .select('*')
+        .eq('user_id', userProfile.id)
+        .order('created_at', { ascending: false })
+      if (!error) setWithdrawals(data || [])
+    } catch {}
   }
 
   const filteredCommissions = commissions.filter(commission => {
@@ -325,6 +354,54 @@ export default function EarningsPage() {
                   <div className="flex items-center gap-1">
                     {getStatusIcon(commission.status)}
                     <span className={`text-xs font-medium capitalize ${commission.status === 'paid' ? 'text-green-600' : 'text-yellow-600'}`}>{commission.status}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Withdrawal History */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-primary-600" />
+              <h3 className="text-sm font-semibold text-gray-900">Withdrawal History</h3>
+            </div>
+            <span className="text-xs text-gray-400">5% fee applied per withdrawal</span>
+          </div>
+          {withdrawals.length === 0 ? (
+            <div className="text-center py-8">
+              <Wallet className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">No withdrawals yet</p>
+              <p className="text-xs text-gray-400 mt-1">Use the Withdraw button on your dashboard to request a payout.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {withdrawals.map(w => (
+                <div key={w.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-900">{new Date(w.created_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                    <div className="text-xs text-gray-500">{w.bank_name} · {w.bank_account_number}</div>
+                    {w.admin_note && <div className="text-xs text-red-500 mt-0.5">{w.admin_note}</div>}
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0 ml-3">
+                    <div className="text-right">
+                      <div className="text-sm font-bold text-gray-900">{new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(w.amount)}</div>
+                      <div className="text-xs text-gray-400">Net: {new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(w.net_amount)}</div>
+                    </div>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full ${
+                      w.status === 'paid' ? 'bg-green-100 text-green-800' :
+                      w.status === 'approved' ? 'bg-blue-100 text-blue-800' :
+                      w.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {w.status === 'paid' && <CheckCircle className="h-3 w-3" />}
+                      {w.status === 'approved' && <Clock className="h-3 w-3" />}
+                      {w.status === 'rejected' && <XCircle className="h-3 w-3" />}
+                      {w.status === 'pending' && <Clock className="h-3 w-3" />}
+                      {w.status === 'approved' ? 'Pending Payment' : w.status}
+                    </span>
                   </div>
                 </div>
               ))}

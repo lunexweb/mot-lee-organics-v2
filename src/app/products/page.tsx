@@ -322,7 +322,7 @@ export default function ProductsPage() {
         </div>
 
         {/* Products Grid */}
-        <div className="mobile-grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
           {filteredProducts.length === 0 ? (
             <div className="col-span-full text-center py-12">
               <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -338,9 +338,9 @@ export default function ProductsPage() {
               const mainImage = productImages[0]
 
               return (
-              <div key={product.id} className="card hover:shadow-md transition-shadow duration-200 flex flex-col h-full">
-                <div className="aspect-w-1 aspect-h-1 mb-4">
-                  <div className="w-full h-48 bg-white rounded-lg flex items-center justify-center relative group">
+              <div key={product.id} className="bg-white rounded-xl border border-gray-200 hover:shadow-md transition-shadow duration-200 flex flex-col overflow-hidden">
+                <div className="relative">
+                  <div className="w-full h-44 bg-gray-50 flex items-center justify-center relative group">
                     {mainImage ? (
                       <>
                         <Image
@@ -377,26 +377,26 @@ export default function ProductsPage() {
                   </div>
                 </div>
 
-                <div className="mb-4 flex-1 flex flex-col">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{product.name}</h3>
-                  <p className="text-gray-600 text-sm mb-2 line-clamp-3 flex-1">{product.description}</p>
-                  <div className="flex items-center justify-between mt-auto">
-                    <span className="text-2xl font-bold text-primary-600">
+                <div className="p-3 flex-1 flex flex-col">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-1 line-clamp-2 leading-snug">{product.name}</h3>
+                  <p className="text-gray-500 text-xs mb-3 line-clamp-2 flex-1 leading-relaxed">{product.description}</p>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-base font-bold text-primary-600">
                       {formatCurrency(product.price)}
                     </span>
-                    <span className="text-sm text-gray-500">
-                      Stock: {product.stock_quantity}
+                    <span className="text-xs text-gray-400">
+                      {product.stock_quantity > 0 ? `${product.stock_quantity} left` : 'Out of stock'}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex gap-2 mt-auto">
+                <div className="flex gap-1.5 p-3 pt-0 mt-auto">
                   <button
                     onClick={() => openProductDetails(product)}
-                    className="flex-1 btn-secondary flex items-center justify-center"
+                    className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-2 text-xs font-semibold border border-gray-200 rounded-lg bg-white text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    <Info className="h-4 w-4 mr-2" />
-                    Details
+                    <Info className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>Details</span>
                   </button>
                   <button
                     onClick={() => {
@@ -405,11 +405,13 @@ export default function ProductsPage() {
                       }
                     }}
                     disabled={product.stock_quantity === 0 || userProfile?.status !== 'active'}
-                    className="flex-1 btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-2 text-xs font-semibold rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    <ShoppingCart className="h-4 w-4 mr-2" />
-                    {product.stock_quantity === 0 ? 'Out of Stock' : 
-                     userProfile?.status !== 'active' ? 'Ask admin to activate' : 'Add to Cart'}
+                    <ShoppingCart className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span className="truncate">
+                      {product.stock_quantity === 0 ? 'Sold Out' :
+                       userProfile?.status !== 'active' ? 'Inactive' : 'Add'}
+                    </span>
                   </button>
                 </div>
               </div>

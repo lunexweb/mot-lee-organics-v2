@@ -117,14 +117,14 @@ export default function CheckoutPage() {
         notes: form.notes,
       }
 
-      // Create order with pending payment status
+      // Create order with pending status - admin must approve payment before it counts
       const { error: orderError } = await supabase
         .from('orders')
         .insert({
           user_id: userProfile.id,
           order_number: orderNumber,
           total_amount: totalAmount,
-          status: 'processing',
+          status: 'pending',
           payment_status: 'pending',
           shipping_address: shippingAddress as any,
         })

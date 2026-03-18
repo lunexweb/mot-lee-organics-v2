@@ -483,6 +483,7 @@ export default function AdminDashboard() {
             { href: '/admin/products', icon: Package, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Products', sub: 'Add & edit products' },
             { href: '/admin/orders', icon: ShoppingCart, color: 'text-green-600', bg: 'bg-green-50', label: 'Orders', sub: 'Track & process' },
             { href: '/admin/payments', icon: DollarSign, color: 'text-green-600', bg: 'bg-green-50', label: 'Payments', sub: 'Confirm EFTs' },
+            { href: '/admin/withdrawals', icon: Wallet, color: 'text-indigo-600', bg: 'bg-indigo-50', label: 'Withdrawals', sub: 'Approve payouts' },
             { href: '/admin/commissions', icon: Award, color: 'text-yellow-600', bg: 'bg-yellow-50', label: 'Commissions', sub: 'Process payouts' },
             { href: '/admin/ranks', icon: Crown, color: 'text-orange-600', bg: 'bg-orange-50', label: 'Ranks', sub: 'Manage comp plan' },
             { href: '/admin/settings', icon: Settings, color: 'text-purple-600', bg: 'bg-purple-50', label: 'Settings', sub: 'Platform config' },

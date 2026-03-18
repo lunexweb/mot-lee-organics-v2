@@ -24,7 +24,10 @@ import {
   Trophy,
   RefreshCw,
   Eye,
-  Coins
+  Coins,
+  X,
+  AlertCircle,
+  Clock
 } from 'lucide-react'
 
 export default function DashboardPage() {
@@ -50,7 +53,8 @@ export default function DashboardPage() {
   const [walletData, setWalletData] = useState({
     eWalletBalance: 0,
     paymentWalletBalance: 0,
-    availableForWithdrawal: 0
+    availableForWithdrawal: 0,
+    totalWithdrawn: 0
   })
   const [incomeBreakdown, setIncomeBreakdown] = useState({
     referralIncome: 0,
@@ -63,6 +67,13 @@ export default function DashboardPage() {
     levels: [0, 0, 0]
   })
   const [recentTransactions, setRecentTransactions] = useState<any[]>([])
+  const [withdrawalModalOpen, setWithdrawalModalOpen] = useState(false)
+  const [withdrawalAmount, setWithdrawalAmount] = useState('')
+  const [withdrawalIboNumber, setWithdrawalIboNumber] = useState('')
+  const [withdrawalSubmitting, setWithdrawalSubmitting] = useState(false)
+  const [withdrawalError, setWithdrawalError] = useState('')
+  const [withdrawalSuccess, setWithdrawalSuccess] = useState(false)
+  const [activeWithdrawal, setActiveWithdrawal] = useState<{ amount: number; net_amount: number; created_at: string; status: 'pending' | 'approved' } | null>(null)
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -70,6 +81,27 @@ export default function DashboardPage() {
       router.push('/login')
     }
   }, [user, loading, router])
+
+  // Real-time wallet sync: auto-refresh when admin updates wallet or withdrawal status
+  useEffect(() => {
+    if (!userProfile || userProfile.role === 'admin') return
+
+    const channel = supabase
+      .channel(`wallet-sync-${userProfile.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'wallets', filter: `user_id=eq.${userProfile.id}` },
+        () => { fetchWalletData() }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'withdrawals', filter: `user_id=eq.${userProfile.id}` },
+        () => { fetchWalletData() }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [userProfile?.id])
 
   useEffect(() => {
     if (userProfile) {
@@ -109,7 +141,8 @@ export default function DashboardPage() {
         supabase
           .from('orders')
           .select('total_amount')
-          .eq('user_id', userProfile.id),
+          .eq('user_id', userProfile.id)
+          .in('status', ['processing', 'shipped', 'delivered']),
         supabase
           .from('commissions')
           .select('commission_amount')
@@ -153,6 +186,7 @@ export default function DashboardPage() {
           .from('orders')
           .select('total_amount')
           .in('user_id', Array.from(allDownlineIds))
+          .in('status', ['processing', 'shipped', 'delivered'])
         teamSales = (teamRes.data || []).reduce((sum, order) => sum + order.total_amount, 0)
       }
 
@@ -174,21 +208,31 @@ export default function DashboardPage() {
     if (!userProfile) return
     
     try {
-      const { data, error } = await supabase
-        .from('wallets')
-        .select('*')
-        .eq('user_id', userProfile.id)
+      const [walletsRes, pendingRes] = await Promise.all([
+        supabase.from('wallets').select('*').eq('user_id', userProfile.id),
+        supabase
+          .from('withdrawals')
+          .select('amount, net_amount, created_at, status')
+          .eq('user_id', userProfile.id)
+          .in('status', ['pending', 'approved'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      ])
       
-      if (!error && data) {
-        const eWallet = data.find(w => w.wallet_type === 'e_wallet')
-        const paymentWallet = data.find(w => w.wallet_type === 'payment_wallet')
+      if (!walletsRes.error && walletsRes.data) {
+        const eWallet = walletsRes.data.find((w: any) => w.wallet_type === 'e_wallet')
+        const paymentWallet = walletsRes.data.find((w: any) => w.wallet_type === 'payment_wallet')
         
         setWalletData({
           eWalletBalance: eWallet?.balance || 0,
           paymentWalletBalance: paymentWallet?.balance || 0,
-          availableForWithdrawal: eWallet?.available_for_withdrawal || 0
+          availableForWithdrawal: eWallet?.available_for_withdrawal || 0,
+          totalWithdrawn: eWallet?.total_withdrawn || 0
         })
       }
+
+      setActiveWithdrawal(pendingRes.data || null)
     } catch (error) {
       console.error('Error fetching wallet data:', error)
     }
@@ -350,6 +394,93 @@ export default function DashboardPage() {
     }
   }
 
+  const handleWithdrawalSubmit = async () => {
+    if (!userProfile) return
+    const amount = parseFloat(withdrawalAmount)
+    setWithdrawalError('')
+
+    // Server-side guard: block if an active (pending/approved) withdrawal already exists
+    const { data: existingActive } = await supabase
+      .from('withdrawals')
+      .select('id')
+      .eq('user_id', userProfile.id)
+      .in('status', ['pending', 'approved'])
+      .limit(1)
+      .maybeSingle()
+
+    if (existingActive) {
+      setWithdrawalError('You have an active withdrawal request. Wait for it to be fully paid before submitting a new one.')
+      await fetchWalletData()
+      return
+    }
+
+    if (!userProfile.bank_account_number || !userProfile.bank_name) {
+      setWithdrawalError('Please add your bank details in Profile before requesting a withdrawal.')
+      return
+    }
+    if (!withdrawalIboNumber.trim()) {
+      setWithdrawalError('Please enter your IBO number to confirm your identity.')
+      return
+    }
+    if (withdrawalIboNumber.trim() !== userProfile.ibo_number) {
+      setWithdrawalError('IBO number does not match your account. Please check and try again.')
+      return
+    }
+    if (isNaN(amount) || amount < 200) {
+      setWithdrawalError('Minimum withdrawal amount is R200.')
+      return
+    }
+    if (amount > walletData.availableForWithdrawal) {
+      setWithdrawalError('Amount exceeds your available balance.')
+      return
+    }
+
+    const fee = parseFloat((amount * 0.05).toFixed(2))
+    const netAmount = parseFloat((amount - fee).toFixed(2))
+
+    setWithdrawalSubmitting(true)
+    try {
+      // Lock funds immediately by reducing available_for_withdrawal
+      const { error: lockError } = await supabase
+        .from('wallets')
+        .update({
+          available_for_withdrawal: parseFloat((walletData.availableForWithdrawal - amount).toFixed(2)),
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', userProfile.id)
+        .eq('wallet_type', 'e_wallet')
+
+      if (lockError) throw lockError
+
+      // Create withdrawal request
+      const { error: withdrawError } = await supabase
+        .from('withdrawals')
+        .insert({
+          user_id: userProfile.id,
+          amount,
+          fee,
+          net_amount: netAmount,
+          status: 'pending',
+          ibo_number: withdrawalIboNumber.trim(),
+          bank_name: userProfile.bank_name || '',
+          bank_account_number: userProfile.bank_account_number || '',
+          bank_account_holder: userProfile.bank_account_holder || userProfile.name,
+          branch_code: userProfile.bank_branch_code || ''
+        })
+
+      if (withdrawError) throw withdrawError
+
+      await fetchWalletData()
+      setWithdrawalSuccess(true)
+      setWithdrawalAmount('')
+      setWithdrawalIboNumber('')
+    } catch (err: any) {
+      setWithdrawalError(err.message || 'Failed to submit withdrawal request.')
+    } finally {
+      setWithdrawalSubmitting(false)
+    }
+  }
+
   const handleSignOut = async () => {
     await signOut()
     router.replace('/login')
@@ -506,29 +637,67 @@ export default function DashboardPage() {
           {/* Wallets */}
           <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-3">
             <h3 className="text-sm font-semibold text-gray-900">Wallets</h3>
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-primary-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Wallet className="h-4 w-4 text-primary-600" />
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-primary-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <Wallet className="h-4 w-4 text-primary-600" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">E-Wallet</div>
+                    <div className="text-xs text-gray-500">Available: {formatCurrency(walletData.availableForWithdrawal)} &middot; Withdrawn: {formatCurrency(walletData.totalWithdrawn)}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-sm font-medium text-gray-900">E-Wallet</div>
-                  <div className="text-xs text-gray-500">Withdrawal: {formatCurrency(walletData.availableForWithdrawal)}</div>
+                <div className="flex items-center gap-3">
+                  <div className="text-lg font-bold text-gray-900">{formatCurrency(walletData.eWalletBalance)}</div>
+                  <button
+                    onClick={() => { setWithdrawalModalOpen(true); setWithdrawalSuccess(false); setWithdrawalError(''); setWithdrawalAmount(''); setWithdrawalIboNumber('') }}
+                    disabled={!!activeWithdrawal || walletData.availableForWithdrawal < 200}
+                    title={activeWithdrawal ? 'Active withdrawal in progress' : walletData.availableForWithdrawal < 200 ? 'Insufficient available balance (min R200)' : ''}
+                    className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-semibold flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Withdraw
+                  </button>
                 </div>
               </div>
-              <div className="text-lg font-bold text-gray-900">{formatCurrency(walletData.eWalletBalance)}</div>
+
+              {/* Active withdrawal notice */}
+              {activeWithdrawal?.status === 'pending' && (
+                <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5">
+                  <Clock className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-yellow-800">Withdrawal request pending</p>
+                    <p className="text-xs text-yellow-700 mt-0.5">
+                      <span className="font-bold">{formatCurrency(activeWithdrawal.amount)}</span> requested &middot; you will receive <span className="font-bold">{formatCurrency(activeWithdrawal.net_amount)}</span> &middot; submitted {new Date(activeWithdrawal.created_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">Awaiting admin approval.</p>
+                  </div>
+                </div>
+              )}
+              {activeWithdrawal?.status === 'approved' && (
+                <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5">
+                  <Wallet className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-blue-800">Pending Payment</p>
+                    <p className="text-xs text-blue-700 mt-0.5">
+                      <span className="font-bold">{formatCurrency(activeWithdrawal.amount)}</span> approved &middot; <span className="font-bold">{formatCurrency(activeWithdrawal.net_amount)}</span> being transferred to your bank account.
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">You can withdraw again once this payment is confirmed.</p>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-primary-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <CreditCard className="h-4 w-4 text-primary-600" />
+                <div className="w-9 h-9 bg-green-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <CreditCard className="h-4 w-4 text-green-600" />
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-gray-900">Payment Wallet</div>
-                  <div className="text-xs text-gray-500">For online shopping</div>
+                  <div className="text-sm font-medium text-gray-900">Repurchase Wallet</div>
+                  <div className="text-xs text-gray-500">5% from repeat orders &middot; Included in E-Wallet</div>
                 </div>
               </div>
-              <div className="text-lg font-bold text-gray-900">{formatCurrency(walletData.paymentWalletBalance)}</div>
+              <div className="text-lg font-bold text-green-600">{formatCurrency(incomeBreakdown.repurchaseIncome)}</div>
             </div>
           </div>
         </div>
@@ -751,6 +920,142 @@ export default function DashboardPage() {
           </p>
         </div>
       </footer>
+
+      {/* Withdrawal Modal */}
+      {withdrawalModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-xl">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-900">Request Withdrawal</h3>
+              <button onClick={() => setWithdrawalModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {withdrawalSuccess ? (
+                <div className="text-center py-4 space-y-3">
+                  <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                    <Wallet className="h-7 w-7 text-green-600" />
+                  </div>
+                  <h4 className="text-base font-bold text-gray-900">Request Submitted!</h4>
+                  <p className="text-sm text-gray-500">Your withdrawal request has been received. Admin will process it within 24–48 hours.</p>
+                  <button onClick={() => setWithdrawalModalOpen(false)}
+                    className="px-6 py-2.5 bg-primary-600 text-white text-sm font-semibold rounded-xl hover:bg-primary-700 transition-colors">
+                    Close
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Balance info */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gray-50 rounded-xl p-3">
+                      <div className="text-xs text-gray-500 mb-0.5">E-Wallet Balance</div>
+                      <div className="text-sm font-bold text-gray-900">{formatCurrency(walletData.eWalletBalance)}</div>
+                    </div>
+                    <div className="bg-green-50 rounded-xl p-3">
+                      <div className="text-xs text-gray-500 mb-0.5">Available to Withdraw</div>
+                      <div className="text-sm font-bold text-green-700">{formatCurrency(walletData.availableForWithdrawal)}</div>
+                    </div>
+                  </div>
+
+                  {/* Bank details check */}
+                  {(!userProfile?.bank_account_number || !userProfile?.bank_name) && (
+                    <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-200 rounded-xl p-3">
+                      <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold text-yellow-800">Bank details required</p>
+                        <p className="text-xs text-yellow-700 mt-0.5">
+                          Please <a href="/profile" className="underline font-medium">update your profile</a> with bank account details before withdrawing.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* IBO Number confirmation */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Your IBO Number <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={withdrawalIboNumber}
+                      onChange={e => setWithdrawalIboNumber(e.target.value)}
+                      placeholder="e.g. IBO-N8P5RAKR"
+                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Enter your IBO number to confirm your identity</p>
+                  </div>
+
+                  {/* Amount input */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Withdrawal Amount (min R200)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-medium">R</span>
+                      <input
+                        type="number"
+                        min="200"
+                        step="0.01"
+                        max={walletData.availableForWithdrawal}
+                        value={withdrawalAmount}
+                        onChange={e => setWithdrawalAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-8 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Live fee calculation */}
+                  {withdrawalAmount && !isNaN(parseFloat(withdrawalAmount)) && parseFloat(withdrawalAmount) > 0 && (
+                    <div className="bg-gray-50 rounded-xl p-3 space-y-1.5 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Requested</span>
+                        <span className="font-medium text-gray-900">{formatCurrency(parseFloat(withdrawalAmount))}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Fee (5%)</span>
+                        <span className="font-medium text-red-600">-{formatCurrency(parseFloat(withdrawalAmount) * 0.05)}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-gray-200 pt-1.5">
+                        <span className="font-semibold text-gray-900">You receive</span>
+                        <span className="font-bold text-green-700">{formatCurrency(parseFloat(withdrawalAmount) * 0.95)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bank details summary */}
+                  {userProfile?.bank_account_number && (
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs space-y-0.5">
+                      <p className="text-xs font-semibold text-blue-800 mb-1">Payment will be sent to:</p>
+                      <p className="text-gray-700">{userProfile.bank_name} · {userProfile.bank_account_number}</p>
+                      {userProfile.bank_account_holder && <p className="text-gray-500">{userProfile.bank_account_holder}</p>}
+                    </div>
+                  )}
+
+                  {withdrawalError && (
+                    <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
+                      <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-700">{withdrawalError}</p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 justify-end pt-1">
+                    <button onClick={() => setWithdrawalModalOpen(false)}
+                      className="px-4 py-2 text-sm border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50">
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleWithdrawalSubmit}
+                      disabled={withdrawalSubmitting || !withdrawalAmount}
+                      className="px-5 py-2 text-sm bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 font-semibold transition-colors"
+                    >
+                      {withdrawalSubmitting ? 'Submitting...' : 'Submit Request'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
