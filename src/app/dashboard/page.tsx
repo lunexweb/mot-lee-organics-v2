@@ -543,37 +543,37 @@ export default function DashboardPage() {
             <div className="w-9 h-9 rounded-xl bg-primary-50 flex items-center justify-center flex-shrink-0">
               <ShoppingCart className="h-4 w-4 text-primary-600" />
             </div>
-            <div className="min-w-0">
+            <div className="flex-1 min-w-0">
               <div className="text-xs text-gray-500">Personal Sales</div>
-              <div className="text-sm font-bold text-gray-900 truncate">{statsLoading ? '—' : formatCurrency(stats.personalSales)}</div>
+              <div className="text-sm font-bold text-gray-900">{statsLoading ? '—' : formatCurrency(stats.personalSales)}</div>
             </div>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-3 flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
               <Users className="h-4 w-4 text-accent-600" />
             </div>
-            <div className="min-w-0">
+            <div className="flex-1 min-w-0">
               <div className="text-xs text-gray-500">Team Size</div>
-              <div className="text-sm font-bold text-gray-900 truncate">{statsLoading ? '—' : stats.downlineCount}</div>
+              <div className="text-sm font-bold text-gray-900">{statsLoading ? '—' : stats.downlineCount}</div>
             </div>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-3 flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0">
               <TrendingUp className="h-4 w-4 text-green-600" />
             </div>
-            <div className="min-w-0">
+            <div className="flex-1 min-w-0">
               <div className="text-xs text-gray-500">Team Sales</div>
-              <div className="text-sm font-bold text-gray-900 truncate">{statsLoading ? '—' : formatCurrency(stats.teamSales)}</div>
+              <div className="text-sm font-bold text-gray-900">{statsLoading ? '—' : formatCurrency(stats.teamSales)}</div>
             </div>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-3 flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-yellow-50 flex items-center justify-center flex-shrink-0">
               <DollarSign className="h-4 w-4 text-yellow-600" />
             </div>
-            <div className="min-w-0">
+            <div className="flex-1 min-w-0">
               <div className="text-xs text-gray-500">Earnings</div>
-              <div className="text-sm font-bold text-gray-900 truncate">{statsLoading ? '—' : formatCurrency(stats.totalEarnings)}</div>
-              {stats.pendingEarnings > 0 && <div className="text-xs text-orange-500 truncate">+{formatCurrency(stats.pendingEarnings)} pending</div>}
+              <div className="text-sm font-bold text-gray-900">{statsLoading ? '—' : formatCurrency(stats.totalEarnings)}</div>
+              {stats.pendingEarnings > 0 && <div className="text-xs text-orange-500">+{formatCurrency(stats.pendingEarnings)} pending</div>}
             </div>
           </div>
         </div>

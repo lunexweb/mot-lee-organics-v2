@@ -1,0 +1,86 @@
+-- =====================================================
+-- CREATE REPURCHASE COMMISSIONS AND MARK AS PAID
+-- For repeat orders, creates 5% repurchase cashback
+-- Matches status of existing commissions for same order
+-- =====================================================
+
+DO $$
+DECLARE
+  r RECORD;
+  v_order_count INTEGER;
+  v_repurchase_amount NUMERIC;
+  v_order_status TEXT;
+BEGIN
+  FOR r IN
+    SELECT o.id as order_id, o.user_id, o.total_amount, o.created_at
+    FROM orders o
+    WHERE o.payment_status = 'paid'
+      AND o.status IN ('processing', 'shipped', 'delivered')
+    ORDER BY o.user_id, o.created_at
+  LOOP
+    -- Count how many paid orders this user had BEFORE this order
+    SELECT COUNT(*) INTO v_order_count
+    FROM orders
+    WHERE user_id = r.user_id
+      AND payment_status = 'paid'
+      AND created_at < r.created_at;
+
+    -- Only process if this is a repeat order (2nd+ order)
+    IF v_order_count > 0 THEN
+      v_repurchase_amount := r.total_amount * 0.05;
+
+      -- Check what status other commissions for this order have
+      SELECT status INTO v_order_status
+      FROM commissions
+      WHERE order_id = r.order_id
+      LIMIT 1;
+
+      -- Default to paid if no other commissions exist
+      v_order_status := COALESCE(v_order_status, 'paid');
+
+      -- Update or insert repurchase commission
+      UPDATE commissions
+      SET commission_type = 'repurchase',
+          commission_amount = ROUND(v_repurchase_amount, 2),
+          status = v_order_status::commission_status
+      WHERE order_id = r.order_id
+        AND user_id = r.user_id
+        AND level = 0;
+      
+      -- If no rows were updated, insert new one
+      IF NOT FOUND THEN
+        INSERT INTO commissions (
+          user_id,
+          order_id,
+          commission_amount,
+          commission_type,
+          level,
+          status,
+          created_at
+        )
+        VALUES (
+          r.user_id,
+          r.order_id,
+          ROUND(v_repurchase_amount, 2),
+          'repurchase',
+          0,
+          v_order_status::commission_status,
+          NOW()
+        );
+      END IF;
+    END IF;
+  END LOOP;
+END;
+$$;
+
+-- Verify repurchase commissions created
+SELECT 
+  commission_type,
+  status,
+  COUNT(*) as count,
+  SUM(commission_amount) as total_amount
+FROM commissions
+WHERE commission_type = 'repurchase'
+GROUP BY commission_type, status;
+
+SELECT '✅ Repurchase commissions created! Refresh your dashboard.' AS status;

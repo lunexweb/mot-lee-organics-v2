@@ -198,9 +198,9 @@ export default function OrdersPage() {
               <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
                 <Icon className={`h-4 w-4 ${color}`} />
               </div>
-              <div className="min-w-0">
+              <div className="flex-1 min-w-0">
                 <div className="text-xs text-gray-500">{label}</div>
-                <div className="text-sm font-bold text-gray-900 truncate">{value}</div>
+                <div className="text-sm font-bold text-gray-900">{value}</div>
               </div>
             </div>
           ))}

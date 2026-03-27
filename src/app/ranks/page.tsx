@@ -90,19 +90,19 @@ export default function RanksPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-4">
 
         {/* Stats row */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
             { icon: Award, color: 'text-primary-600', bg: 'bg-primary-50', label: 'Total Ranks', value: ranks.length },
             { icon: Star, color: 'text-yellow-600', bg: 'bg-yellow-50', label: 'Highest Rank', value: ranks[ranks.length - 1]?.name || 'N/A' },
             { icon: Briefcase, color: 'text-green-600', bg: 'bg-green-50', label: 'Max Salary', value: ranks.length ? formatCurrency(Math.max(...ranks.map(r => r.salary))) : '-' },
           ].map(({ icon: Icon, color, bg, label, value }) => (
-            <div key={label} className="bg-white rounded-xl border border-gray-200 p-3 flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
-                <Icon className={`h-4 w-4 ${color}`} />
+            <div key={label} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
+                <Icon className={`h-5 w-5 ${color}`} />
               </div>
-              <div className="min-w-0">
-                <div className="text-xs text-gray-500">{label}</div>
-                <div className="text-sm font-bold text-gray-900 truncate">{value}</div>
+              <div className="flex-1">
+                <div className="text-xs text-gray-500 mb-0.5">{label}</div>
+                <div className="text-base font-bold text-gray-900">{value}</div>
               </div>
             </div>
           ))}
