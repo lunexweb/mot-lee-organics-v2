@@ -108,49 +108,49 @@ export default function GenealogyTree() {
     const hasChildren = node.children.length > 0
 
     return (
-      <div key={node.id} className="ml-4">
+      <div key={node.id} className="ml-0 sm:ml-4">
         <div 
-          className={`flex items-center p-3 rounded-lg border cursor-pointer hover:bg-gray-50 gap-3 min-w-0 ${
+          className={`flex flex-col sm:flex-row sm:items-center p-3 rounded-lg border cursor-pointer hover:bg-gray-50 gap-3 ${
             depth === 0 ? 'bg-primary-50 border-primary-200' : 'bg-white border-gray-200'
           }`}
           onClick={() => hasChildren && toggleNode(node.id)}
         >
-          <div className="flex items-center flex-1 min-w-0">
+          <div className="flex items-start sm:items-center flex-1 min-w-0 gap-2">
             {hasChildren ? (
               isExpanded ? (
-                <ChevronDown className="h-4 w-4 text-gray-400 mr-2" />
+                <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
               ) : (
-                <ChevronRight className="h-4 w-4 text-gray-400 mr-2" />
+                <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
               )
             ) : (
-              <div className="w-6 mr-2"></div>
+              <div className="w-4 flex-shrink-0"></div>
             )}
             
-            <div className={`p-2 rounded-full ${
+            <div className={`p-2 rounded-full flex-shrink-0 ${
               depth === 0 ? 'bg-primary-600' : 'bg-gray-400'
             }`}>
               <User className="h-4 w-4 text-white" />
             </div>
             
-            <div className="ml-3 min-w-0">
-              <div className="flex items-center min-w-0">
-                <h3 className={`font-medium truncate ${
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center flex-wrap gap-1.5 mb-1">
+                <h3 className={`font-medium text-sm sm:text-base ${
                   depth === 0 ? 'text-primary-900' : 'text-gray-900'
                 }`}>
                   {node.name}
                 </h3>
                 {depth === 0 && (
-                  <span className="ml-2 text-xs bg-primary-200 text-primary-800 px-2 py-1 rounded-full">
+                  <span className="text-xs bg-primary-200 text-primary-800 px-2 py-0.5 rounded-full">
                     You
                   </span>
                 )}
               </div>
-              <p className="text-sm text-gray-600 break-words truncate" title={node.email}>{node.email}</p>
-              <p className="text-xs text-gray-500 break-words truncate" title={`IBO: ${node.ibo_number}`}>IBO: {node.ibo_number}</p>
+              <p className="text-xs sm:text-sm text-gray-600 break-all">{node.email}</p>
+              <p className="text-xs text-gray-500">IBO: {node.ibo_number}</p>
             </div>
           </div>
           
-          <div className="flex items-center space-x-2 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0 self-start sm:self-center">
             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
               node.status === 'active' 
                 ? 'bg-green-100 text-green-800' 
@@ -159,7 +159,7 @@ export default function GenealogyTree() {
               {node.status}
             </span>
             {hasChildren && (
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-gray-500 whitespace-nowrap">
                 {node.children.length} member{node.children.length !== 1 ? 's' : ''}
               </span>
             )}
@@ -167,7 +167,7 @@ export default function GenealogyTree() {
         </div>
         
         {isExpanded && hasChildren && (
-          <div className="mt-2">
+          <div className="mt-2 ml-2 sm:ml-0">
             {node.children.map(child => renderNode(child, depth + 1))}
           </div>
         )}
