@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { AlertModal } from '@/components/Modal'
@@ -12,6 +12,7 @@ import {
   ShoppingCart, 
   DollarSign, 
   TrendingUp,
+  RefreshCw,
   Package,
   UserCheck,
   AlertCircle,
@@ -39,6 +40,7 @@ interface AdminStats {
   activeUsers: number
   totalOrders: number
   totalRevenue: number
+  teamSales: number
   pendingCommissions: number
   totalCommissions: number
   recentOrders: any[]
@@ -72,20 +74,18 @@ export default function AdminDashboard() {
     activeUsers: 0,
     totalOrders: 0,
     totalRevenue: 0,
+    teamSales: 0,
     pendingCommissions: 0,
     totalCommissions: 0,
     recentOrders: [],
     topPerformers: []
   })
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  useEffect(() => {
-    if (userProfile?.role === 'admin') {
-      fetchAdminStats()
-    }
-  }, [userProfile])
-
-  const fetchAdminStats = async () => {
+  const fetchAdminStats = useCallback(async (isManual = false) => {
+    if (isManual) setRefreshing(true)
     try {
       // Run all independent queries in parallel for maximum performance
       const [
@@ -132,22 +132,37 @@ export default function AdminDashboard() {
 
       const totalRevenue = ordersRes.data?.reduce((sum, order) => sum + order.total_amount, 0) || 0
 
+      // Team sales = ALL orders total (every status)
+      const { data: allOrders } = await supabase.from('orders').select('total_amount')
+      const teamSales = allOrders?.reduce((sum, order) => sum + order.total_amount, 0) || 0
+
       setStats({
         totalUsers: totalUsersRes.count || 0,
         activeUsers: activeUsersRes.count || 0,
         totalOrders: totalOrdersRes.count || 0,
         totalRevenue,
+        teamSales,
         pendingCommissions: pendingCommissionsRes.count || 0,
         totalCommissions: totalCommissionsRes.count || 0,
         recentOrders: recentOrdersRes.data || [],
         topPerformers: topPerformersRes.data || []
       })
+      setLastUpdated(new Date())
     } catch (error) {
       console.error('Error fetching admin stats:', error)
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (userProfile?.role === 'admin') {
+      fetchAdminStats()
+      const interval = setInterval(() => fetchAdminStats(), 30000)
+      return () => clearInterval(interval)
+    }
+  }, [userProfile, fetchAdminStats])
 
   const searchIBO = async () => {
     if (!iboNumber.trim()) {
@@ -453,6 +468,34 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {/* Team Sales - Real Time */}
+        <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl p-5 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="h-4 w-4 text-green-200" />
+                <span className="text-sm font-medium text-green-100">Team Sales</span>
+                <span className="flex items-center gap-1 text-xs bg-green-400/30 text-green-100 px-2 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 bg-green-300 rounded-full animate-pulse inline-block" />
+                  Live
+                </span>
+              </div>
+              <div className="text-3xl font-bold tracking-tight">{formatCurrency(stats.teamSales)}</div>
+              <div className="text-xs text-green-200 mt-1">Total across all {stats.totalOrders} orders</div>
+            </div>
+            <div className="text-right">
+              <button onClick={() => fetchAdminStats(true)} disabled={refreshing}
+                className="flex items-center gap-1.5 text-xs bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                {refreshing ? 'Updating...' : 'Refresh'}
+              </button>
+              {lastUpdated && (
+                <div className="text-xs text-green-200 mt-2">Updated {lastUpdated.toLocaleTimeString()}</div>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
